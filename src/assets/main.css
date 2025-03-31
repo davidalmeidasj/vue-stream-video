@@ -1,0 +1,4 @@
+.v-card-title, .v-card-text, .v-toolbar-title, .v-footer {
+  user-select: none;
+  cursor: default;
+}
