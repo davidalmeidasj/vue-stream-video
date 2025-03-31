@@ -1,4 +1,3 @@
-// test/setup.ts
 import { vi, beforeAll } from 'vitest'
 import { config } from '@vue/test-utils'
 import { vuetify } from '../src/plugins/vuetify'
