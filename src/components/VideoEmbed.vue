@@ -1,5 +1,6 @@
 <template>
   <div class="video-wrapper" data-testid="video-embed">
+    <!-- Vídeo -->
     <iframe
       v-if="embedUrl"
       ref="iframeRef"
@@ -10,6 +11,18 @@
       data-testid="video-frame"
     ></iframe>
 
+    <!-- Canvas sobreposto -->
+    <canvas
+      ref="canvasRef"
+      class="overlay-canvas"
+      :class="{ active: drawingEnabled }"
+      @mousedown="startDrawing"
+      @mousemove="draw"
+      @mouseup="stopDrawing"
+      @mouseleave="stopDrawing"
+    />
+
+    <!-- Botão flutuante customizado -->
     <component
       v-if="floatingAction"
       :is="floatingAction"
@@ -17,15 +30,17 @@
       data-testid="floating-action"
     />
 
+    <!-- Botão para ativar/desativar desenho -->
     <FloatingActionButton
-      tooltip="Captura de Tela"
-      :onClick="pauseVideo"
-      icon="mdi-camera"
+      :tooltip="drawingEnabled ? 'Desativar Desenho' : 'Ativar Desenho'"
+      :onClick="toggleCanvas"
+      :icon="drawingEnabled ? 'mdi-pencil-off' : 'mdi-pencil'"
       :top="15"
       :right="15"
-      data-testid="screenshot-button"
+      data-testid="toggle-drawing-button"
     />
 
+    <!-- Botões de movimentação -->
     <div class="dpad-wrapper" data-testid="dpad-wrapper">
       <FloatingActionButton
         tooltip="Mover para cima"
@@ -62,7 +77,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, type Component, ref } from 'vue';
+import { computed, ref, type Component, onMounted, watch } from 'vue';
 import FloatingActionButton from '@/components/FloatingActionButton.vue';
 
 const props = defineProps<{
@@ -71,10 +86,55 @@ const props = defineProps<{
 }>();
 
 const iframeRef = ref<HTMLIFrameElement | null>(null);
+const canvasRef = ref<HTMLCanvasElement | null>(null);
+const drawingEnabled = ref(false);
+let isDrawing = false;
 
-// Simula ação de pausar o vídeo
-function pauseVideo() {
-  console.log('Take screenshot function');
+function toggleCanvas() {
+  drawingEnabled.value = !drawingEnabled.value;
+}
+
+function shouldDraw() {
+  return drawingEnabled.value && canvasRef.value;
+}
+
+function getMousePos(e: MouseEvent) {
+  const canvas = canvasRef.value!;
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top,
+  };
+}
+
+function startDrawing(e: MouseEvent) {
+  if (!shouldDraw()) return;
+  const ctx = canvasRef.value!.getContext('2d');
+  if (!ctx) return;
+  isDrawing = true;
+  const { x, y } = getMousePos(e);
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+}
+
+function draw(e: MouseEvent) {
+  if (!isDrawing || !shouldDraw()) return;
+  const ctx = canvasRef.value!.getContext('2d');
+  if (!ctx) return;
+  const { x, y } = getMousePos(e);
+  ctx.lineTo(x, y);
+  ctx.strokeStyle = 'red';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+}
+
+function stopDrawing() {
+  if (!shouldDraw()) return;
+  const ctx = canvasRef.value!.getContext('2d');
+  if (!ctx) return;
+  isDrawing = false;
+  ctx.closePath();
 }
 
 function move(value: string) {
@@ -104,6 +164,30 @@ const embedUrl = computed(() => {
     return '';
   }
 });
+
+// Redimensiona o canvas para cobrir o iframe
+function resizeCanvasToMatchIframe() {
+  const canvas = canvasRef.value;
+  const iframe = iframeRef.value;
+  if (canvas && iframe) {
+    const rect = iframe.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+  }
+}
+
+onMounted(() => {
+  resizeCanvasToMatchIframe();
+  window.addEventListener('resize', resizeCanvasToMatchIframe);
+});
+
+watch(drawingEnabled, (enabled) => {
+  if (enabled) {
+    resizeCanvasToMatchIframe();
+  }
+});
 </script>
 
 <style scoped>
@@ -122,6 +206,20 @@ const embedUrl = computed(() => {
   z-index: 1;
 }
 
+.overlay-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  display: none;
+  pointer-events: none;
+}
+
+.overlay-canvas.active {
+  display: block;
+  pointer-events: auto;
+}
+
 .floating-slot {
   position: absolute;
   bottom: 16px;
@@ -138,7 +236,6 @@ const embedUrl = computed(() => {
   width: 120px;
   height: 120px;
 }
-
 
 .dpad-wrapper :deep(.fab) {
   position: absolute;
